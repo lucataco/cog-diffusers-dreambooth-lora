@@ -10,3 +10,9 @@ To run a training prediction:
 
     cog predict -i input_images=@dog.zip
 
+
+## Licensing and commercial use
+
+If you generate images on Replicate with FLUX.1 models and their fine-tunes, then you can use the images commercially.
+
+If you download the weights off Replicate and generate images on your own computer, you can’t use the images commercially.
