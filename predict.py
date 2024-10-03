@@ -9,6 +9,7 @@ from zipfile import ZipFile
 
 MODEL_NAME = "FLUX.1-dev"
 MODEL_URL_DEV = "https://weights.replicate.delivery/default/black-forest-labs/FLUX.1-dev/files.tar"
+NUM_GPUS = 2
 
 def download_weights(url, dest):
     start = time.time()
@@ -20,8 +21,7 @@ def download_weights(url, dest):
 class Predictor(BasePredictor):
     def setup(self) -> None:
         """Load the model into memory to make running multiple predictions efficient"""
-        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-        os.system("accelerate config default --mixed_precision bf16")
+        os.system("accelerate config default --mixed_precision bf16 --num_processes " + str(NUM_GPUS) + " --num_machines 1")
         print("Loading Flux dev pipeline")
         if not os.path.exists("FLUX.1-dev"):
             download_weights(MODEL_URL_DEV, ".")
@@ -80,16 +80,20 @@ class Predictor(BasePredictor):
 
         # Trainer params
         run_params = [
-            "accelerate", "launch", "train_dreambooth_lora_flux.py",
+            "accelerate", "launch",
+            "--multi_gpu",
+            "--num_processes", str(NUM_GPUS),
+            "--num_machines", "1",
+            "--mixed_precision", "bf16",
+            "train_dreambooth_lora_flux.py",
             "--pretrained_model_name_or_path", MODEL_NAME,
             "--instance_data_dir", str(input_dir),
             "--output_dir", output_dir,
-            "--mixed_precision", "bf16",
             "--instance_prompt", instance_prompt,
             "--resolution", str(resolution),
             "--train_batch_size", str(train_batch_size),
             "--gradient_accumulation_steps", str(gradient_accumulation_steps),
-            "--optimizer=prodigy",
+            "--optimizer", "prodigy",
             "--learning_rate", str(learning_rate),
             "--lr_scheduler", lr_scheduler,
             "--lr_warmup_steps", "0",
