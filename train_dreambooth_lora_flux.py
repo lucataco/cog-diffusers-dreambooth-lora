@@ -105,7 +105,7 @@ def save_model_card(
 
 These are {repo_id} DreamBooth LoRA weights for {base_model}.
 
-The weights were trained using [DreamBooth](https://dreambooth.github.io/) with the [Flux diffusers trainer](https://github.com/huggingface/diffusers/blob/main/examples/dreambooth/README_flux.md).
+The weights were trained using [DreamBooth](https://dreambooth.github.io/) with the [Flux diffusers trainer](https://github.com/huggingface/diffusers/blob/main/examples/dreambooth/README_flux.md) on [Replicate](https://replicate.com/lucataco/diffusers-dreambooth-lora).
 
 Was LoRA for the text encoder enabled? {train_text_encoder}.
 
@@ -147,6 +147,7 @@ Please adhere to the licensing terms as described [here](https://huggingface.co/
         "diffusers-training",
         "diffusers",
         "lora",
+        "replicate",
         "flux",
         "flux-diffusers",
         "template:sd-lora",

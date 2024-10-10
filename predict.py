@@ -32,7 +32,7 @@ class Predictor(BasePredictor):
         input_images: Path = Input(description="A zip file containing the images that will be used for training.", default=None,),
         instance_prompt: str = Input(description="Instance prompt to trigger the image generation", default="a photo of TOK dog"),
         resolution: int = Input(description="The resolution for input images, all the images in the train/validation dataset will be resized to this", default=512, choices=[512,768,1024]),
-        max_train_steps: int = Input(description="Total number of training steps to perform", default=100, ge=500, le=6000),
+        max_train_steps: int = Input(description="Total number of training steps to perform", default=500, ge=100, le=6000),
         rank: int = Input(description="The dimension of the LoRA", default=4, ge=4, le=64),
         train_batch_size: int = Input(description="Batch size for the training dataloader", default=1, ge=1, le=8),
         gradient_accumulation_steps: int = Input(description="Number of updates steps to accumulate before performing a backward/update pass", default=1, ge=1, le=8),
@@ -107,7 +107,7 @@ class Predictor(BasePredictor):
             "--seed", str(seed),
             "--logging_dir", output_logs
         ]
-        # Check for
+        # Check for 8bit
         # if optimizer == "AdamW":
         #     run_params.extend(["--use_8bit_adam"])
 
@@ -129,13 +129,9 @@ class Predictor(BasePredictor):
         print(f"Using params: {run_params}")
         subprocess.run(run_params, check=True, close_fds=False)
 
-        # rename safetensors to lora_weights.safetensors
+        # Rename safetensors to lora_weights.safetensors
         if os.path.exists(f"{output_dir}/pytorch_lora_weights.safetensors"):
             os.system(f"mv {output_dir}/pytorch_lora_weights.safetensors {output_dir}/lora.safetensors")
-        
-        # Copy Lora license if uploading to HF
-        if hub_model_id is not None:
-            os.system(f"cp lora-license.md {output_dir}/README.md")
 
         # Create uploadable tar
         output_path = "/tmp/trained_model.tar"
