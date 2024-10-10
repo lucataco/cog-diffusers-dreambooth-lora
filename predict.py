@@ -34,17 +34,17 @@ class Predictor(BasePredictor):
             default=None,
         ),
         instance_prompt: str = Input(description="Instance prompt to trigger the image generation", default="a photo of TOK dog"),
-        resolution: int = Input(description="The resolution for input images, all the images in the train/validation dataset will be resized to this", default=1024, ge=512, le=1024),
+        resolution: int = Input(description="The resolution for input images, all the images in the train/validation dataset will be resized to this", default=512, choices=[512,768,1024]),
+        max_train_steps: int = Input(description="Total number of training steps to perform", default=500, ge=500, le=6000),
         train_batch_size: int = Input(description="Batch size for the training dataloader", default=1, ge=1, le=8),
         gradient_accumulation_steps: int = Input(description="Number of updates steps to accumulate before performing a backward/update pass", default=1, ge=1, le=8),
         learning_rate: float = Input(description="Initial learning rate to use (1.0 for Prodigy)", default=1.0, ge=0.0001, le=1),
         lr_scheduler: str = Input(description="'The scheduler type to use", default="constant", choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]),
-        max_train_steps: int = Input(description="Total number of training steps to perform", default=1000, ge=10, le=6000),
         checkpointing_steps: int = Input(description="Save a checkpoint of the training state every X updates", default=None, ge=100, le=6000),
         seed: int = Input(description="Seed for reproducibility", default=None),
         # Optional inputs:
         hf_token: Secret = Input(description="Huggingface token (optional) with write access to upload to Hugging Face", default=None),
-        hub_model_id: str = Input(description="Huggingface model location for upload. Requires HF token. Ex: lucataco/dreambooth-lora", default=None)
+        hub_model_id: str = Input(description="Huggingface model location for upload. Requires a HF token with write permissions. Ex: lucataco/flux-qsd", default=None)
     ) -> Path:
         """Run a single prediction on the model"""
         if seed is None:
@@ -54,9 +54,11 @@ class Predictor(BasePredictor):
         # Cleanup
         input_dir = "input_images"
         output_base = "/tmp/train"
+        output_logs = "/tmp/logs"
         output_dir = output_base + "/output/flux_train_replicate"
         os.system(f"rm -rf {input_dir}")
         os.system(f"rm -rf {output_base}")
+        os.system(f"rm -rf {output_logs}")
 
         # Check input images zip file
         if not input_images.name.endswith(".zip"):
@@ -96,7 +98,7 @@ class Predictor(BasePredictor):
             "--max_train_steps", str(max_train_steps),
             "--checkpointing_steps", str(checkpointing_steps),
             "--seed", str(seed),
-            "--logging_dir", "/tmp/logs"
+            "--logging_dir", output_logs
         ]
         # Check to upload to HF
         if hf_token is not None and hub_model_id is not None:
@@ -108,7 +110,7 @@ class Predictor(BasePredictor):
         
         # Run the trainer
         print(f"Using params: {run_params}")
-        subprocess.check_call(run_params)
+        subprocess.run(run_params, check=True, close_fds=False)
 
         # rename safetensors to lora_weights.safetensors
         os.system(f"mv {output_dir}/pytorch_lora_weights.safetensors {output_dir}/lora.safetensors")
