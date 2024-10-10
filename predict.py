@@ -29,22 +29,22 @@ class Predictor(BasePredictor):
     # LoRA + DreamBooth
     def predict(
         self,
-        input_images: Path = Input(
-            description="A zip file containing the images that will be used for training.",
-            default=None,
-        ),
+        input_images: Path = Input(description="A zip file containing the images that will be used for training.", default=None,),
         instance_prompt: str = Input(description="Instance prompt to trigger the image generation", default="a photo of TOK dog"),
         resolution: int = Input(description="The resolution for input images, all the images in the train/validation dataset will be resized to this", default=512, choices=[512,768,1024]),
-        max_train_steps: int = Input(description="Total number of training steps to perform", default=500, ge=500, le=6000),
+        max_train_steps: int = Input(description="Total number of training steps to perform", default=100, ge=500, le=6000),
+        rank: int = Input(description="The dimension of the LoRA", default=4, ge=4, le=64),
         train_batch_size: int = Input(description="Batch size for the training dataloader", default=1, ge=1, le=8),
         gradient_accumulation_steps: int = Input(description="Number of updates steps to accumulate before performing a backward/update pass", default=1, ge=1, le=8),
-        learning_rate: float = Input(description="Initial learning rate to use (1.0 for Prodigy)", default=1.0, ge=0.0001, le=1),
+        optimizer: str = Input(description="The optimizer type to use", default="AdamW", choices=["AdamW", "prodigy"]),
+        learning_rate: float = Input(description="Initial learning rate to use (1.0 for Prodigy)", default=0.0001, ge=0.0001, le=1),
         lr_scheduler: str = Input(description="'The scheduler type to use", default="constant", choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]),
         checkpointing_steps: int = Input(description="Save a checkpoint of the training state every X updates", default=None, ge=100, le=6000),
         seed: int = Input(description="Seed for reproducibility", default=None),
-        # Optional inputs:
+        backend: str = Input(description="Dynamo Backend", default="no", choices=["no", "eager", "aot_eager", "inductor", "nvfuser", "aot_nvfuser", "aot_cudagraphs", "ofi", "fx2trt", "onnxrt", "ipex"]),
         hf_token: Secret = Input(description="Huggingface token (optional) with write access to upload to Hugging Face", default=None),
-        hub_model_id: str = Input(description="Huggingface model location for upload. Requires a HF token with write permissions. Ex: lucataco/flux-qsd", default=None)
+        hub_model_id: str = Input(description="Huggingface model location for upload. Requires a HF token with write permissions. Ex: lucataco/flux-qsd", default=None),
+        wandb_api_key: Secret = Input(description="Weights and Biases API key, if you'd like to log training progress to W&B.", default=None)
     ) -> Path:
         """Run a single prediction on the model"""
         if seed is None:
@@ -80,11 +80,18 @@ class Predictor(BasePredictor):
         if checkpointing_steps is None:
             checkpointing_steps = max_train_steps+1
 
+        # Check optimizer
+        if optimizer == "prodigy":
+            learning_rate = 1.0
         # Trainer params
         run_params = [
-            "accelerate", "launch", "train_dreambooth_lora_flux.py",
+            "accelerate",
+            "launch",
+            "--dynamo_backend", backend,
+            "train_dreambooth_lora_flux.py",
             "--pretrained_model_name_or_path", MODEL_NAME,
             "--instance_data_dir", str(input_dir),
+            "--rank", str(rank),
             "--output_dir", output_dir,
             "--mixed_precision", "bf16",
             "--instance_prompt", instance_prompt,
@@ -100,6 +107,10 @@ class Predictor(BasePredictor):
             "--seed", str(seed),
             "--logging_dir", output_logs
         ]
+        # Check for
+        # if optimizer == "AdamW":
+        #     run_params.extend(["--use_8bit_adam"])
+
         # Check to upload to HF
         if hf_token is not None and hub_model_id is not None:
             token = hf_token.get_secret_value()
@@ -107,13 +118,20 @@ class Predictor(BasePredictor):
             run_params.extend(["--push_to_hub"])
             run_params.extend(["--hub_token", token])
             run_params.extend(["--hub_model_id", hub_model_id])
+
+        # Check to log training run to Wandb
+        if wandb_api_key:
+            api_key = wandb_api_key.get_secret_value()
+            os.environ["WANDB_API_KEY"] = api_key
+            run_params.extend(['--report_to', 'wandb'])
         
         # Run the trainer
         print(f"Using params: {run_params}")
         subprocess.run(run_params, check=True, close_fds=False)
 
         # rename safetensors to lora_weights.safetensors
-        os.system(f"mv {output_dir}/pytorch_lora_weights.safetensors {output_dir}/lora.safetensors")
+        if os.path.exists(f"{output_dir}/pytorch_lora_weights.safetensors"):
+            os.system(f"mv {output_dir}/pytorch_lora_weights.safetensors {output_dir}/lora.safetensors")
         
         # Copy Lora license if uploading to HF
         if hub_model_id is not None:
